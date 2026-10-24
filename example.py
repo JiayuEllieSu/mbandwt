@@ -5,5 +5,5 @@ signal = np.arange(12, dtype=float)
 coefficients = decompose(signal, bands=3)
 recovered = reconstruct(coefficients)
 
-print("Coefficient shape:", coefficients.shape)
-print("Maximum reconstruction error:", np.max(np.abs(signal - recovered)))
+print("Coefficients shape:", coefficients.shape)
+print("Reconstruction error:", np.max(np.abs(signal - recovered)))
