@@ -1,8 +1,8 @@
 # mbandwt
 
-A Python project for exploring **M-band signal transforms**, FIR filter banks, and reconstruction. Instead of splitting a signal into only two channels, the filter-bank code works with an arbitrary number of channels, `M >= 2`.
+Python code for **M-band signal transforms**, FIR filter banks, and reconstruction, with an arbitrary number of channels `M >= 2`.
 
-This is an experimental learning and research project, not a production signal-processing library. It includes a small cosine block-transform demo alongside overlapping FIR filter banks and multilevel transforms.
+The package includes a cosine block transform, overlapping FIR filter banks, and multilevel decomposition.
 
 ## Install
 
@@ -12,9 +12,9 @@ Requires Python 3.9+, NumPy, and SciPy.
 python -m pip install -e .
 ```
 
-## 1. Simple block transform
+## Block transform
 
-The original small example divides a 1D signal into blocks and uses an orthonormal cosine basis. This is not an overlapping wavelet filter bank.
+This example applies an orthonormal cosine transform to consecutive blocks of a one-dimensional signal. The blocks do not overlap.
 
 ```python
 import numpy as np
@@ -29,7 +29,7 @@ print(np.allclose(signal, recovered))     # True
 
 Run `python example.py` to see the same example.
 
-## 2. FIR filter banks
+## FIR filter banks
 
 An FIR filter bank uses one analysis and one synthesis filter for each channel. The analysis stage filters and downsamples the signal. The inverse stage upsamples and filters the coefficients, then combines the results.
 
@@ -48,7 +48,7 @@ print(np.allclose(signal, recovered))
 
 `FilterBank(analysis, synthesis)` also accepts custom FIR filters. Arbitrary custom coefficients do **not** automatically give perfect reconstruction. Check a bank with `bank.validate()` before using it for an inverse.
 
-## 3. Multilevel M-band decomposition
+## Multilevel decomposition
 
 At each level, `wavedec` splits the approximation (channel 0) into another `M` channels. `waverec` reverses the levels using stored lengths and boundary information.
 
@@ -67,7 +67,7 @@ print("error:", np.max(np.abs(signal - recovered)))
 
 See [`examples/multilevel_analysis.py`](examples/multilevel_analysis.py) for subband energies and [`examples/custom_bank_validation.py`](examples/custom_bank_validation.py) for validating custom filters.
 
-## Other experiments
+## Additional features
 
 - `FilterBank`: analysis/synthesis FIR filter coefficients and diagnostic methods
 - `polyphase.py`: polyphase matrices and numerical perfect-reconstruction checks
@@ -76,13 +76,13 @@ See [`examples/multilevel_analysis.py`](examples/multilevel_analysis.py) for sub
 - Boundary modes: `periodic`, `zero`, `symmetric`, `reflect`, `constant`
 - Complex-valued and batched signals with a selectable transform axis
 
-A few restrictions are worth noting. Finite-extension boundary modes may produce more coefficients than samples; non-multiple signal lengths can require padding. Multilevel decomposition expands **only the approximation channel**, not every branch. Some wavelet families are two-channel examples, while lapped and paraunitary banks support arbitrary `M`.
+Finite-extension boundary modes can produce more coefficients than the input length, and some lengths require padding. Multilevel decomposition splits only the approximation channel. Haar and Daubechies filters are implemented for `M = 2`; lapped and paraunitary constructions support larger `M`.
 
 For the filtering phase, gain/delay compensation, and polyphase conventions, see [`docs/conventions.md`](docs/conventions.md).
 
 ## Mathematical exposition
 
-The accompanying exposition, *From Fourier Analysis to M-Band Wavelets: Multiresolution and Perfect-Reconstruction Filter Banks*, develops the mathematical background of the transforms implemented here. It covers orthogonal multiresolution analysis, M-channel filters, vanishing moments, polyphase representations, and perfect reconstruction, followed by computational illustrations.
+The paper *From Fourier Analysis to M-Band Wavelets: Multiresolution and Perfect-Reconstruction Filter Banks* covers the mathematics behind the implementation: multiresolution analysis, vanishing moments, polyphase matrices, filter design, and perfect reconstruction.
 
 - [Read the exposition (PDF)](docs/paper/mband_wavelets.pdf)
 - [LaTeX source](docs/paper/mband_wavelets.tex)
@@ -98,8 +98,6 @@ python -m pytest -q
 
 Optional cross-checks use PyWavelets and externally generated LTFAT reference data; absent optional data may cause a skip.
 
-This repository is an early experiment and has not been independently audited. Its numerical checks are not a proof that every possible filter bank is correct.
-
-Project page: [M-Band Transform Experiments](https://jiayuelliesu.github.io/projects/mbandwt/)
+Passing the tests does not establish perfect reconstruction for an arbitrary user-defined bank. Use `bank.validate()` to check custom coefficients.
 
 MIT License. Jiayu Ellie Su.

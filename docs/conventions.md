@@ -1,9 +1,7 @@
 # mbandwt mathematical conventions
 
-This document fixes every convention used by the implementation: filtering
-orientation, decimation phase, reconstruction phase, normalization, delay
-handling, polyphase definitions, and finite-signal boundary semantics. All
-code and all tests refer back to this document. Version: 0.1.0.
+Filtering, downsampling, polyphase, delay, and boundary conventions used in
+`mbandwt` (version 0.1.0).
 
 ## 1. Signal and filter model
 
@@ -46,9 +44,8 @@ xt[i] = c * x[i - d]
 with **gain** `c` and **delay** `d` determined by the distortion transfer
 function `T(z) = (1/M) * sum_k G_k(z) H_k(z) = c z^{-d}`. `mbandwt` computes
 `t = (1/M) * sum_k conv(g_k, h_k)` once per bank, takes `d = argmax |t|`,
-`c = t[d]`, and the inverse transform **always compensates** the delay and
-gain. Users therefore never see the internal delay: for PR banks,
-`idwt(dwt(x)) == x` to numerical precision.
+`c = t[d]`. The inverse compensates for gain and delay, so PR banks
+satisfy `idwt(dwt(x)) == x` to numerical precision.
 
 ## 4. Polyphase representation
 
@@ -114,9 +111,8 @@ coefficients equals the padded signal length.
 
 ## 6. Finite-extension modes (`zero`, `symmetric`, `reflect`, `constant`)
 
-Version 0.1 makes a deliberate design choice: finite-extension modes are
-implemented as **expansive transforms with exact reconstruction** for
-arbitrary filters and arbitrary `M`.
+Finite-extension modes retain additional boundary coefficients to support
+reconstruction for PR banks with arbitrary `M`.
 
 * `zero`: the signal is treated as zero outside `[0, N-1]`; analysis is the
   full linear convolution decimated at phase 0, with per-band length
@@ -130,11 +126,9 @@ arbitrary filters and arbitrary `M`.
   reconstruction recovers the extended signal exactly and crops the center
   `[E : E+N]`.
 
-Consequences: reconstruction is exact to machine precision for **every** PR
-bank and **every** mode, at the price of extra boundary coefficients in the
-finite-extension modes. Non-expansive symmetric boundary handling (which
-requires linear-phase filter structure) is future work and will be an
-additional mode, not a change to these semantics.
+For PR banks, these extension modes reconstruct to numerical precision,
+although they retain more coefficients. Non-expansive symmetric boundary
+handling is not implemented.
 
 Extension-mode index maps, for extended index `i` in `[-E, N-1+E]`:
 
@@ -181,4 +175,4 @@ sub-sample alignment offset: a circular shift of the **input** by
 coefficient arrays (and a possible sign flip of the detail band). The two
 conventions' decimation grids can differ by a number of samples that is not
 a multiple of `M` (Haar is such a case), which no coefficient-domain shift
-alone can absorb. The regression suite verifies this equivalence explicitly.
+alone can absorb. The tests check this alignment.

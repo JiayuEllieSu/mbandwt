@@ -1,8 +1,6 @@
-"""Objective benchmarks: forward/inverse runtime and reconstruction error
-across signal lengths, M, and levels; internal naive-convolution vs
-upfirdn-engine comparison; optional PyWavelets column at M = 2.
+"""Timing and reconstruction benchmarks for several filter banks.
 
-Run:  python benchmarks/bench_transform.py
+Run: python benchmarks/bench_transform.py
 """
 
 import time
@@ -67,7 +65,7 @@ def main():
     try:
         import pywt
 
-        print("\nM = 2 sanity vs PyWavelets (not a performance claim):")
+        print("\nM = 2 comparison with PyWavelets:")
         bank = daubechies(4)
         for N in [2**14, 2**16]:
             x = RNG.standard_normal(N)

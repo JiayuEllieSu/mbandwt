@@ -1,7 +1,6 @@
 # Contributing to mbandwt
 
-This is an early-stage, research-oriented software project. Small,
-well-tested improvements and reproducible bug reports are welcome.
+Bug reports and changes with accompanying tests are welcome.
 
 ## Local setup
 
@@ -19,11 +18,10 @@ python -m pytest -q
 - Validate new filter coefficients and note their source; do not copy
   unsourced published coefficient tables.
 - Keep the core dependency set limited to NumPy and SciPy.
-- Describe limitations candidly. A passing round-trip test alone is not
-  enough to establish mathematically correct wavelet behavior.
+- Check the polyphase perfect-reconstruction condition in addition to
+  round-trip tests.
 
 ## Scope
 
-The project currently focuses on finite-signal M-band DWTs and
-perfect-reconstruction FIR filter banks. Features outside that scope can
-be discussed as proposals rather than treated as promised releases.
+The package currently covers finite-signal M-band transforms and
+perfect-reconstruction FIR filter banks.

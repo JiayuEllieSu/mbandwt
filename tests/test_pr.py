@@ -1,10 +1,7 @@
-"""Validation-layer tests.
+"""Perfect-reconstruction and filtering tests.
 
-Includes an independent naive reference implementation of the transform
-conventions (direct index arithmetic, no upfirdn, no folding trick) and
-cross-checks the fast engine against it for M = 2, 3, 5 — an internal
-"second implementation" oracle complementing the external PyWavelets
-regression (see docs/conventions.md Sections 2, 3, 5).
+Direct index-based convolutions provide a reference for the periodic
+and zero-extension implementations at M = 2, 3, and 5.
 """
 
 import numpy as np
@@ -19,7 +16,7 @@ RNG = np.random.default_rng(123)
 
 
 # ----------------------------------------------------------------------
-# naive reference implementations of the documented conventions
+# Direct convolution references
 # ----------------------------------------------------------------------
 def naive_zero_band(x, h, M):
     N, L = len(x), len(h)
