@@ -1,0 +1,39 @@
+name: Build wavelet exposition PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/paper/mband_wavelets.tex'
+      - 'docs/paper/generate_figures.py'
+      - '.github/workflows/build-wavelet-paper.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LaTeX and plotting dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-latex-base texlive-latex-recommended texlive-fonts-recommended python3-numpy python3-scipy python3-matplotlib
+      - name: Rebuild figures
+        run: /usr/bin/python3 docs/paper/generate_figures.py
+      - name: Compile paper
+        working-directory: docs/paper
+        run: |
+          pdflatex -interaction=nonstopmode -halt-on-error -file-line-error mband_wavelets.tex
+          pdflatex -interaction=nonstopmode -halt-on-error -file-line-error mband_wavelets.tex
+      - name: Commit generated PDF
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/paper/mband_wavelets.pdf
+          if ! git diff --cached --quiet; then
+            git commit -m "Build wavelet exposition PDF"
+            git push
+          fi

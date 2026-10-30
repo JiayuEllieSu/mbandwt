@@ -80,6 +80,15 @@ A few restrictions are worth noting. Finite-extension boundary modes may produce
 
 For the filtering phase, gain/delay compensation, and polyphase conventions, see [`docs/conventions.md`](docs/conventions.md).
 
+## Mathematical exposition
+
+The accompanying exposition, *From Fourier Analysis to M-Band Wavelets: Multiresolution and Perfect-Reconstruction Filter Banks*, develops the mathematical background of the transforms implemented here. It covers orthogonal multiresolution analysis, M-channel filters, vanishing moments, polyphase representations, and perfect reconstruction, followed by computational illustrations.
+
+- [Read the exposition (PDF)](docs/paper/mband_wavelets.pdf)
+- [LaTeX source](docs/paper/mband_wavelets.tex)
+- [Figure and numerical experiment code](docs/paper/generate_figures.py)
+- [Project page](https://jiayuelliesu.github.io/projects/mbandwt/)
+
 ## Tests
 
 ```bash

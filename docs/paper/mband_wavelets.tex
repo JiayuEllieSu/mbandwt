@@ -1,0 +1,500 @@
+\documentclass{article}
+
+\usepackage[margin=0.8in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={From Fourier Analysis to M-Band Wavelets: Multiresolution and Perfect-Reconstruction Filter Banks},
+  pdfauthor={Jiayu Ellie Su}
+}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\R}{\mathbb R}
+\newcommand{\C}{\mathbb C}
+\newcommand{\Z}{\mathbb Z}
+\newcommand{\V}{\mathcal V}
+\newcommand{\W}{\mathcal W}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\abs}[1]{\left\lvert#1\right\rvert}
+\newcommand{\inner}[2]{\left\langle#1,#2\right\rangle}
+\newcommand{\code}[1]{\texttt{#1}}
+\DeclareMathOperator{\diag}{diag}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,showstringspaces=false}
+
+\title{From Fourier Analysis to $M$-Band Wavelets:\\
+Multiresolution and Perfect-Reconstruction Filter Banks}
+\author{Jiayu Ellie Su\thanks{Source code for the \texttt{mbandwt} project: \url{https://github.com/JiayuEllieSu/mbandwt}.}}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+The discrete wavelet transform represents a finite signal through approximations and details at several scales. I begin with the Haar transform and the orthogonal decomposition of Euclidean space, then generalize from two filters to an $M$-channel filter bank. The main questions are how analysis and synthesis filters achieve perfect reconstruction, how vanishing moments determine their response to polynomial trends, and what the polyphase formulation reveals about filter-bank design. The final sections examine my Python project \texttt{mbandwt}, which implements $M$-channel finite-impulse-response transforms, recursive decomposition, and reconstruction tests. Numerical examples compare a dyadic Daubechies filter with a published three-band construction and a lapped cosine bank.
+\end{abstract}
+\tableofcontents
+
+\section{Fourier analysis and localization}
+A Fourier transform describes a signal in terms of its frequency content. With the convention used here, the transform of a continuous function $f$ is
+\begin{equation}
+\widehat f(\omega)=\int_{\R}f(t)e^{-i\omega t}\,dt.
+\label{eq:ft}
+\end{equation}
+The coefficient at a given frequency depends on the entire function. This makes the Fourier transform well suited to signals whose spectral content is constant in time, but less convenient when the question concerns the location of an abrupt change. A short click, for example, is distinguished from a sustained tone partly by its duration.
+
+To see the localization issue directly, take the normalized discrete Fourier transform of an impulse $x[n]=\delta_{n,n_0}$ on $N$ samples:
+\begin{equation}
+\widehat x[k]=\frac{1}{\sqrt N}\sum_{n=0}^{N-1}x[n]e^{-2\pi i kn/N}
+=\frac{1}{\sqrt N}e^{-2\pi i k n_0/N}.
+\end{equation}
+Thus $\abs{\widehat x[k]}=N^{-1/2}$ at \emph{every} frequency. Its position is encoded in phase, but is invisible in the Fourier magnitude alone. This observation is emphasized in Lambers's lecture notes \cite{lambers2006}; it does not mean that the Fourier transform loses information, only that locality is represented indirectly.
+
+The short-time Fourier transform introduces a window $g$ to retain some time information:
+\begin{equation}
+\mathcal S_gf(\tau,\omega)
+=\int_{\R} f(t)\overline{g(t-\tau)}e^{-i\omega t}\,dt.
+\end{equation}
+Its time-frequency resolution is determined by the width of the chosen window. Wavelet analysis uses different window widths at different scales. Broad basis functions capture slow variation, while narrow ones can locate short events. This is the starting point for Mallat's multiresolution framework \cite{mallat1989}.
+
+A wavelet family is built from a function $\psi$ by dilation and translation. For the dyadic case, one convenient convention is
+\begin{equation}
+\psi_{j,k}(t)=2^{j/2}\psi(2^jt-k),\qquad j,k\in\Z.
+\label{eq:dyadfamily}
+\end{equation}
+The normalization preserves $L^2$ norms across scales. The continuous wavelet transform, $\inner{f}{\psi_{a,b}}$, is useful for probing arbitrary scales, whereas a discrete orthonormal wavelet transform chooses a structured collection of scales and translations that can represent a signal without redundancy. The discussion below concerns the latter.
+
+\section{The discrete wavelet transform as a change of basis}
+\subsection{The Haar transform}
+Consider two samples $(x_0,x_1)$. Instead of retaining them separately, record a scaled average and difference:
+\begin{equation}
+\begin{pmatrix}a\\d\end{pmatrix}
+=\underbrace{\frac{1}{\sqrt2}\begin{pmatrix}1&1\\1&-1\end{pmatrix}}_{Q}
+\begin{pmatrix}x_0\\x_1\end{pmatrix}.
+\label{eq:haar}
+\end{equation}
+Because $Q^\top Q=I$, reconstruction is obtained by transposing the matrix, and
+\begin{equation}
+ x_0^2+x_1^2=a^2+d^2.
+\end{equation}
+Applying the same change of basis to neighboring pairs transforms $N$ samples into $N/2$ averages and $N/2$ differences. Repeating the procedure only on the averages yields Haar's multilevel wavelet transform. Orthogonality provides a simple inverse and preserves the Euclidean norm.
+
+The continuous Haar scaling and wavelet functions are
+\begin{equation}
+\phi(t)=\mathbf 1_{[0,1)}(t),\qquad
+\psi(t)=\mathbf 1_{[0,1/2)}(t)-\mathbf 1_{[1/2,1)}(t).
+\end{equation}
+Haar is compactly supported and exactly localized, but its discontinuities give relatively poor smooth-frequency localization. More sophisticated wavelets replace the two-tap filters with longer filters that cancel low-degree polynomials.
+
+\subsection{Filter rows and the wavelet matrix}
+A general two-band transform uses a low-pass filter $h_0$ and a high-pass filter $h_1$. For a periodic signal $x\in\R^N$, suppose the filters are shifted by two positions each time and arranged as the rows of a square matrix $W_N$. If the rows are orthonormal, then
+\begin{equation}
+W_NW_N^\top=W_N^\top W_N=I,
+\quad x=W_N^\top(W_Nx),
+\quad \norm{W_Nx}_2=\norm{x}_2.
+\label{eq:matrixenergy}
+\end{equation}
+
+The four-tap Daubechies filter $D4$ (also called $\mathrm{db}2$) provides a concrete example of a compactly supported orthonormal wavelet filter \cite{daubechies1992}. Writing $h_0[n]=\alpha_n$ for $n=0,\ldots,3$ gives
+\begin{equation}
+\boldsymbol\alpha=\frac{1}{4\sqrt2}\bigl(1+\sqrt3,\,3+\sqrt3,\,3-\sqrt3,\,1-\sqrt3\bigr),
+\qquad \beta_n=(-1)^n\alpha_{3-n}.
+\label{eq:d4}
+\end{equation}
+The resulting periodic $8\times8$ matrix can be defined without writing all 64 entries: its first four rows are the circular shifts by $0,2,4,6$ of $(\alpha_0,\alpha_1,\alpha_2,\alpha_3,0,0,0,0)$, and its last four rows use the same shifts of $\boldsymbol\beta$. Direct multiplication verifies $W_8W_8^\top=I$.
+
+\begin{example}[An eight-sample decomposition]
+For $x=(1,2,\ldots,8)^\top$, the periodic $D4$ transform under the row convention above is approximately
+\begin{equation}
+W_8x=(2.3108,\ 5.1392,\ 7.9676,\ 10.0382,\ 0,\ 0,\ 0,\ -2.8284)^\top.
+\label{eq:d4numerical}
+\end{equation}
+The approximation coefficients are the first four entries; the details are the last four. The large final detail is caused by the \emph{periodic boundary}: sample $8$ is treated as adjacent to sample $1$. Indeed, $\norm{x}_2^2=204=\norm{W_8x}_2^2$. Filter reversal or a different decimation phase changes coefficient order and alignment, but not the underlying orthogonal decomposition.
+\end{example}
+
+\subsection{Projections and multiresolution subspaces}
+Let $A_1\in\R^{N/2}$ and $D_1\in\R^{N/2}$ denote the first-stage approximation and detail vectors. The coordinate split
+\begin{equation}
+W_Nx=\begin{bmatrix}A_1\\D_1\end{bmatrix}
+\end{equation}
+corresponds to an orthogonal decomposition of the original space:
+\begin{equation}
+\R^N=\V_1\oplus\W_1,
+\qquad x=P_{\V_1}x+P_{\W_1}x.
+\end{equation}
+Here $P_{\V_1}$ and $P_{\W_1}$ are orthogonal projections, not merely a vague division into ``smooth'' and ``rough.'' If $B$ is the first $N/2$ columns of $W_N^\top$, then $P_{\V_1}=BB^\top$. The norm identity in \eqref{eq:matrixenergy} becomes the Pythagorean identity
+\begin{equation}
+\norm{x}_2^2=\norm{A_1}_2^2+\norm{D_1}_2^2.
+\end{equation}
+At successive scales, the approximation spaces satisfy $\V_{j-1}=\V_j\oplus\W_j$. This is the discrete counterpart of Mallat's multiresolution analysis \cite{mallat1989}.
+
+\section{The \texorpdfstring{$M$}{M}-band transform}
+\subsection{The one-level \texorpdfstring{$M$}{M}-band transform}
+There is no mathematical requirement to split the spectrum into only two channels. For $M\ge2$, take $M$ analysis filters
+\begin{equation}
+h_0[n],h_1[n],\ldots,h_{M-1}[n],
+\end{equation}
+where channel $0$ is designated the approximation branch and the remaining channels are detail branches. Under the \emph{convolve-then-decimate, phase-zero} convention used in \texttt{mbandwt} \cite{su2026}, their coefficients are
+\begin{equation}
+ c_k[r]=(h_k*x)[Mr]=\sum_{m\in\Z}h_k[m]x[Mr-m],
+ \qquad k=0,\ldots,M-1.
+ \label{eq:analysis}
+\end{equation}
+For a periodic signal of length $N$ divisible by $M$, each output has $N/M$ samples. Thus the total number of coefficients is $M(N/M)=N$: critically sampled analysis retains exactly as many coordinates as the original signal.
+
+A full one-level orthogonal wavelet decomposition takes the form
+\begin{equation}
+\R^N=\V_1\oplus\W_1^{(1)}\oplus\cdots\oplus\W_1^{(M-1)},
+\qquad
+\norm{x}_2^2=\norm{A_1}_2^2+\sum_{k=1}^{M-1}\norm{D_{1,k}}_2^2.
+\label{eq:mbandsplit}
+\end{equation}
+The $M-1$ detail channels allow more flexibility than a single high-pass branch. However, they are not automatically sharply separated frequency intervals. Frequency selectivity depends on the actual coefficients $h_k$, not merely on the value of $M$.
+
+\subsection{Recursive decomposition and a filter-bank tree}
+At level $j$, only the preceding approximation $A_{j-1}$ is transformed. For an orthogonal $M$-band system,
+\begin{equation}
+\V_{j-1}=\V_j\oplus\bigoplus_{k=1}^{M-1}\W_j^{(k)},
+\qquad
+\R^N=\V_J\oplus\bigoplus_{j=1}^J\bigoplus_{k=1}^{M-1}\W_j^{(k)}.
+\label{eq:orthosum}
+\end{equation}
+If $N$ is divisible by $M^J$, then $\dim\V_J=N/M^J$ and $\dim\W_j^{(k)}=N/M^j$. The coefficient count telescopes:
+\begin{equation}
+\frac{N}{M^J}+(M-1)\sum_{j=1}^J\frac{N}{M^j}=N.
+\label{eq:count}
+\end{equation}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=.85\linewidth]{figures/multiresolution_tree.pdf}
+\caption{The ordinary three-band multiresolution tree. Each stage creates one new approximation and two detail arrays. A wavelet-packet transform would also split the detail branches.}
+\label{fig:tree}
+\end{figure}
+
+For $M=3$, each stage yields one approximation and two details, and the typical depth for $N$ samples grows like $\log_3N$. This changes the scale spacing relative to a two-band transform, but does not establish that either is universally better.
+
+\subsection{The scaling function and multiple mother wavelets}
+When the filter bank generates a multiresolution analysis of $L^2(\R)$, a scaling function $\phi$ satisfies the refinement equation
+\begin{equation}
+ \phi(t)=\sqrt M\sum_{n\in\Z}h_0[n]\phi(Mt-n).
+ \label{eq:refine}
+\end{equation}
+The $M-1$ associated wavelets are defined by
+\begin{equation}
+ \psi^{(k)}(t)=\sqrt M\sum_{n\in\Z}h_k[n]\phi(Mt-n),
+ \qquad k=1,\ldots,M-1.
+ \label{eq:mother}
+\end{equation}
+These are $M$-adic analogues of the Haar or Daubechies construction. An invertible filter bank does not necessarily give stable, appropriately normalized wavelet functions. In particular, arbitrary unitary channel mixing can preserve perfect reconstruction while destroying the interpretation of channel $0$ as a smooth approximation \cite{steffen1993,lin2006}.
+
+\section{Orthogonality and vanishing moments}
+\subsection{Shifted-filter orthogonality}
+For a real FIR analysis bank, a convenient sufficient condition for the integer translates of the filter rows to be orthonormal is
+\begin{equation}
+\sum_{n\in\Z}h_i[n]h_j[n-Mr]=\delta_{ij}\delta_{r0},
+\quad i,j\in\{0,\ldots,M-1\},\ r\in\Z.
+\label{eq:crosscorr}
+\end{equation}
+For complex filters, conjugate the second factor. The shift is $M$ samples, matching the decimation factor. Cross-correlations between distinct channels and between distinct translates must vanish. Normalization $\sum_n\abs{h_i[n]}^2=1$ is only the special case $i=j$ and $r=0$; normalization alone does not ensure orthogonality.
+
+\begin{proposition}[Orthonormality gives exact reconstruction]
+Suppose the periodic analysis matrix $A_N\in\C^{N\times N}$ has entries obtained from $M$ filters whose periodic $M$-spaced translates form an orthonormal family. Then $A_N$ is unitary, and the inverse is $A_N^*$.
+\end{proposition}
+\begin{proof}
+By hypothesis the inner product of each pair of rows is $\delta_{pq}$, so $A_NA_N^*=I_N$. Because $A_N$ is square, this implies $A_N^*A_N=I_N$ as well. Thus $A_N^*$ is its inverse. Taking squared norms of $A_Nx$ proves Parseval's identity.
+\end{proof}
+
+\subsection{Vanishing moments as polynomial cancellation}
+A wavelet $\psi$ has $K$ vanishing moments if
+\begin{equation}
+ \int_{\R}t^p\psi(t)\,dt=0,
+ \qquad p=0,\ldots,K-1.
+ \label{eq:vmcontinuous}
+\end{equation}
+For a finite high-pass filter, a corresponding algebraic condition is
+\begin{equation}
+ \sum_n n^p h_k[n]=0,
+ \qquad p=0,\ldots,K-1,\quad k\ge1.
+ \label{eq:vmdiscrete}
+\end{equation}
+These conditions say that the detail filters annihilate low-degree discrete polynomials away from boundary effects. To see the connection to \eqref{eq:vmcontinuous}, substitute \eqref{eq:mother} and let $u=Mt-n$. The integral becomes a sum of terms containing $\sum_n n^q h_k[n]$ for $q\le p$. If all these sums vanish, so does the continuous wavelet moment, provided the refinement construction and relevant moments are well-defined.
+
+For $D4$, one checks $\sum_n\beta_n=\sum_n n\beta_n=0$; both the constant and linear components disappear from its detail channel, which is why $D4$ has two vanishing moments. For an orthonormal $M$-band wavelet system, one also typically normalizes
+\begin{equation}
+\sum_n h_0[n]=\sqrt M,
+\qquad \sum_n h_k[n]=0\quad(k\ge1).
+\label{eq:dccondition}
+\end{equation}
+Higher-order moment cancellation improves sparsity on sufficiently smooth signals, but usually requires longer support. In the deeper theory, regularity of the refinable scaling function and the existence of a stable orthonormal wavelet basis involve further conditions beyond the numerical moments alone \cite{daubechies1992,steffen1993}.
+
+\section{Perfect reconstruction through polyphase matrices}
+\subsection{Analysis and synthesis as operators}
+The inverse filter bank inserts $M-1$ zeros between successive coefficients, filters each expanded channel with a synthesis filter $g_k$, and adds the results:
+\begin{equation}
+\widetilde x[n]=\sum_{k=0}^{M-1}\bigl(g_k*\uparrow_M c_k\bigr)[n],
+\qquad
+(\uparrow_M c)[Mr]=c[r].
+\label{eq:synthesis}
+\end{equation}
+Perfect reconstruction (PR) means that the combined system recovers every input, perhaps with a known nonzero gain $c$ and delay $d$:
+\begin{equation}
+\widetilde x[n]=c\,x[n-d],\quad c\ne0.
+\label{eq:delay}
+\end{equation}
+The inverse compensates these two factors. Crucially, PR does \emph{not} imply orthogonality: biorthogonal analysis and synthesis banks can also satisfy \eqref{eq:delay} \cite{vaidyanathan1993,vetterli1995}.
+
+\subsection{Splitting filters into phases}
+Let $H_k(z)=\sum_n h_k[n]z^{-n}$ and $G_k(z)=\sum_n g_k[n]z^{-n}$. The $M$ polyphase components group taps by index modulo $M$. With the conventions documented in \texttt{mbandwt}, define
+\begin{align}
+H_k(z)&=\sum_{r=0}^{M-1}z^{-r}E_{kr}(z^M),
+& E_{kr}[q]&=h_k[Mq+r],\label{eq:polyE}\\
+G_k(z)&=\sum_{r=0}^{M-1}z^{-(M-1-r)}R_{rk}(z^M),
+& R_{rk}[q]&=g_k[Mq+M-1-r].\label{eq:polyR}
+\end{align}
+The $M\times M$ matrices $E(z)$ and $R(z)$ hold polynomials, not scalars. The alias cancellation and distortion conditions collapse into one matrix identity:
+\begin{equation}
+\boxed{R(z)E(z)=c\,z^{-q_0}I_M.}
+\label{eq:polypr}
+\end{equation}
+With this choice of polyphase components, the sample-domain delay is $d=Mq_0+M-1$. The test multiplies the two polynomial matrices and compares the result with a scaled, delayed identity. This computation is implemented in \code{polyphase.py}; the method \code{pr\_report()} exposes it through \code{FilterBank} \cite{su2026}.
+
+For an orthonormal analysis bank, its polyphase matrix is \emph{paraunitary}:
+\begin{equation}
+E(e^{i\omega})E(e^{i\omega})^*=I_M,
+\qquad\text{for every }\omega.
+\label{eq:paraunitary}
+\end{equation}
+This expresses an all-frequency matrix conservation law. A purely numerical check at a finite set of frequencies is useful, but polynomial-matrix multiplication is a stronger test for a finite filter bank because it verifies all polynomial coefficients up to floating-point error.
+
+\subsection{A constructive factorization}
+One way to manufacture guaranteed paraunitary systems is to multiply elementary paraunitary factors. Let $V_0,\ldots,V_K$ be unitary $M\times M$ matrices and set
+\begin{equation}
+\Lambda(z)=\diag(1,\ldots,1,z^{-1}),
+\qquad E(z)=V_K\Lambda(z)V_{K-1}\cdots\Lambda(z)V_0.
+\label{eq:factored}
+\end{equation}
+Each factor is unitary on the unit circle, so their product is also unitary there. Extracting $h_k[Mq+r]$ from $E_{kr}[q]$ produces length-$M(K+1)$ analysis filters. The function \code{paraunitary\_from\_factors} implements this construction, and \code{random\_paraunitary} chooses random orthogonal factors by QR decomposition \cite{su2026,vaidyanathan1993}.
+
+\begin{remark}[Perfect reconstruction is not enough]
+A random paraunitary bank need not satisfy the DC normalization in \eqref{eq:dccondition}, even when it is orthogonal. Without these constraints, recursively applying the designated approximation channel need not produce a meaningful low-frequency hierarchy. The distinction matters when choosing a bank for multiresolution analysis.
+\end{remark}
+
+\section{An algebraic construction of three-band filters}
+The algebraic framework of Lin, Xu, Shi, and Hao \cite{lin2006} illustrates how the multichannel problem can be phrased entirely in finite-dimensional linear algebra. Consider $M$ real filters of length $ML$ and group their taps into $M\times M$ blocks:
+\begin{equation}
+ A_\ell=\begin{pmatrix}
+ h_0[M\ell]&\cdots&h_0[M\ell+M-1]\\
+ \vdots&&\vdots\\
+ h_{M-1}[M\ell]&\cdots&h_{M-1}[M\ell+M-1]
+ \end{pmatrix},\qquad \ell=0,\ldots,L-1.
+\label{eq:blocks}
+\end{equation}
+For $L=2$, sufficient orthogonality constraints include
+\begin{align}
+ A_0A_0^\top+A_1A_1^\top&=I_M,& A_0A_1^\top&=0,\label{eq:lin1}\\
+ A_0^\top A_0+A_1^\top A_1&=I_M,& A_0^\top A_1&=0.\label{eq:lin2}
+\end{align}
+The low-pass normalization is written compactly as
+\begin{equation}
+ (A_0+A_1)\boldsymbol{1}=\sqrt M\,e_0,
+ \quad\boldsymbol{1}=(1,\ldots,1)^\top,\quad e_0=(1,0,\ldots,0)^\top.
+\label{eq:linDC}
+\end{equation}
+
+\begin{proposition}[A simple algebraic family, after Lin et al.]
+Let $U,V$ be real orthogonal $M\times M$ matrices and let $\Pi_0,\Pi_1$ be complementary coordinate projections satisfying $\Pi_0+\Pi_1=I_M$ and $\Pi_0\Pi_1=0$. Set
+\begin{equation}
+A_0=U\Pi_0V^\top,\qquad A_1=U\Pi_1V^\top.
+\end{equation}
+Then \eqref{eq:lin1} and \eqref{eq:lin2} hold. If additionally $UV^\top\boldsymbol{1}=\sqrt M e_0$, then \eqref{eq:linDC} holds as well.
+\end{proposition}
+\begin{proof}
+Because $\Pi_j$ are orthogonal projections, $A_jA_j^\top=U\Pi_jU^\top$ and $A_j^\top A_j=V\Pi_jV^\top$. The two sums are therefore $I_M$, while each mixed product vanishes because $\Pi_0\Pi_1=0$. Finally, $A_0+A_1=UV^\top$, giving the stated normalization.
+\end{proof}
+
+The paper develops richer families for more blocks and explains how a Householder transformation can enforce the normalization. This approach constructs complete banks by matrix factorization instead of specifying the low-pass filter first \cite{lin2006}.
+
+\begin{table}[htbp]
+\centering\small
+\caption{A two-vanishing-moment, three-band filter bank from Table 1 of Lin et al. \cite{lin2006}. Columns are analysis filters and each row is one successive tap. Values are rounded to eight decimals here; computations used the fourteen-decimal values printed in the source.}
+\label{tab:linfilters}
+\begin{tabular}{rrrr}
+\toprule
+$n$ & $h_0[n]$ & $h_1[n]$ & $h_2[n]$\\\midrule
+0 & $ 0.33838610$ & $-0.11737702$ & $ 0.40363687$\\
+1 & $ 0.53083619$ & $ 0.54433105$ & $-0.62853936$\\
+2 & $ 0.72328628$ & $-0.01870575$ & $ 0.46060475$\\
+3 & $ 0.23896417$ & $-0.69911956$ & $-0.40363687$\\
+4 & $ 0.04651408$ & $-0.13608276$ & $-0.07856742$\\
+5 & $-0.14593601$ & $ 0.42695404$ & $ 0.24650203$\\\bottomrule
+\end{tabular}
+\end{table}
+
+For this bank, $\sum_n h_0[n]\approx\sqrt3$ and $\sum_n h_1[n]\approx\sum_n h_2[n]\approx0$. Both high-pass filters also satisfy $\sum_n n h_k[n]\approx0$. Unlike $D4$, the six-tap construction produces two detail channels, both with two vanishing moments. The numerical example below uses these published coefficients.
+
+\section{The \texorpdfstring{\texttt{mbandwt}}{mbandwt} implementation}
+\subsection{From a block transform to an overlapping FIR bank}
+I wrote the Python package \code{mbandwt} to experiment with transforms that have an arbitrary number of channels $M\ge2$ \cite{su2026}. The source is available at \url{https://github.com/JiayuEllieSu/mbandwt}. Version 0.1.0 contains two distinct approaches: a nonoverlapping block transform and an FIR filter-bank implementation.
+
+The functions \code{decompose} and \code{reconstruct} in \code{block\_transform.py} divide a one-dimensional vector into consecutive length-$M$ blocks and apply an orthonormal DCT-II matrix $C$. Its entries are
+\begin{equation}
+C_{kn}=\begin{cases}
+ M^{-1/2},&k=0,\\[2pt]
+ \sqrt{2/M}\cos\!\left(\dfrac{\pi k(n+1/2)}M\right),&1\le k<M,
+\end{cases}
+\qquad 0\le n<M.
+\label{eq:dct}
+\end{equation}
+The block coefficients are $Cx_{\mathrm{block}}$ and the inverse uses $C^\top$. This is a genuine orthonormal block transform, but the elementary demo by itself is \emph{not} an overlapping, multilevel FIR wavelet transform. With an appropriate repeated approximation split, block-orthogonal systems can be organized into $M$-adic Haar-like transforms; this is a different claim from saying that every block DCT automatically produces a smooth wavelet family.
+
+The main library instead centers on a \code{FilterBank} object containing $M$ analysis filters and $M$ synthesis filters. The functions \code{dwt}/\code{idwt} use convolution and decimation, with SciPy's \code{upfirdn} as the low-level filtering operation. The functions \code{wavedec}/\code{waverec} then recurse on approximation channel $0$. The user can specify $M$ through the supplied bank, not through a hard-coded two-band branch.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Selected components of the publicly available \texttt{mbandwt} source tree, examined October 2026 \cite{su2026}.}
+\label{tab:code}
+\begin{tabular}{@{}lp{0.65\linewidth}@{}}
+\toprule
+\textbf{Module or API} & \textbf{Mathematical and computational role}\\\midrule
+\code{block\_transform.py} & Nonoverlapping orthonormal DCT-II blocks; simple finite-dimensional prototype.\\
+\code{filterbank.py} & Immutable analysis and synthesis taps; gain, delay, frequency responses, moment diagnostics.\\
+\code{transform.py} & One-level $M$-channel filtering and inversion, including periodic folding and finite extensions.\\
+\code{multilevel.py} & Repeated analysis of channel $0$ with per-level length bookkeeping.\\
+\code{polyphase.py} & Polynomial matrix $R(z)E(z)$ and algebraic PR residual.\\
+\code{validation.py} & Polyphase, impulse-response, delay, and operator orthogonality checks.\\
+\code{families/} & Haar, Daubechies, DCT blocks, lazy splitters, lapped cosine banks, and factored paraunitary banks.\\
+\code{tests/}, \code{benchmarks/} & Direct-convolution oracles, round-trip tests, optional PyWavelets comparisons, and timing scripts.\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{A lapped \texorpdfstring{$M$}{M}-channel example}
+The family function \code{mlt(M)} constructs $M$ length-$2M$ filters using a sine window and cosine modulation:
+\begin{align}
+w[n]&=\sin\!\left(\frac{\pi(n+1/2)}{2M}\right),\qquad 0\le n<2M,\\
+h_k[n]&=w[n]\sqrt{\frac2M}\cos\!\left[\frac{\pi}{M}\left(k+\frac12\right)\left(n+\frac12+\frac M2\right)\right],
+\quad 0\le k<M.
+\label{eq:mlt}
+\end{align}
+Unlike the block DCT, these filters overlap adjacent blocks. The modulation is related to the modulated lapped transform and the time-domain alias-cancellation principle studied by Princen and Bradley \cite{princen1986}. In the repository, \code{mlt} is useful as an arbitrary-$M$ orthonormal test family.
+
+For $M=4$, the formula in \eqref{eq:mlt} has $\sum_n h_0[n]=-2$, rather than $+\sqrt4$. Flipping the sign of this one filter gives the usual positive-DC scaling convention without changing perfect reconstruction. The other channels have zero sum, but they do not in general possess two vanishing moments. This distinguishes the lapped cosine example from the two-moment three-band construction in Table~\ref{tab:linfilters}.
+
+\subsection{Finite boundaries, delay, and metadata}
+For finite signals, the treatment of boundaries changes the transform coefficients and the inverse procedure. The repository documents five modes: \code{periodic}, \code{zero}, \code{symmetric}, \code{reflect}, and \code{constant}. In periodic mode, an input length not divisible by $M$ is padded periodically on the right, then cropped after inversion. In the other modes, the transform uses a full convolution or an explicit extension and can retain \emph{more} coefficients than input samples to avoid losing boundary information. In particular, \code{symmetric} repeats edge samples, whereas \code{reflect} mirrors about an edge sample without repeating it.
+
+Each result object retains its original length, work length, padding or extension size, transform axis, boundary mode, and filter-bank signature. This is why exact finite-signal reconstruction requires more than the formal relation $W^\top W=I$. In addition, the library computes the composite impulse response
+\begin{equation}
+ t[n]=\frac1M\sum_{k=0}^{M-1}(g_k*h_k)[n],
+ \label{eq:composite}
+\end{equation}
+locates its dominant delay, and compensates that delay and gain during the inverse. The full PR checker separately verifies the stronger matrix condition \eqref{eq:polypr} and checks agreement with an operational impulse response. The bank signature prevents reconstruction using a different set of filter coefficients \cite{su2026}.
+
+\subsection{An example using the package}
+The following example using the package performs a four-level, three-band transform and tests reconstruction. The result container keeps the band ordering and boundary metadata.
+\begin{lstlisting}
+import numpy as np
+from mbandwt import wavedec, waverec
+from mbandwt.families import mlt
+
+M = 3
+bank = mlt(M)
+t = np.arange(3**6) / 3**6
+x = np.sin(2*np.pi*5*t) + 0.5*(t > 0.6)
+
+report = bank.validate()
+coeffs = wavedec(x, bank, level=4, mode="periodic")
+x_recovered = waverec(coeffs)
+
+print(report.perfect_reconstruction)
+print(np.linalg.norm(x-x_recovered) / np.linalg.norm(x))
+print(coeffs.band_energies())
+\end{lstlisting}
+The repository also includes examples of multilevel analysis, custom filter validation, and timing tests. Regression tests compare the filtering engine with direct index-based convolution and, when available, PyWavelets for the dyadic case \cite{su2026,lee2019}. These checks address implementation fidelity; they cannot prove that every user-supplied FIR bank has the mathematical properties of a wavelet system.
+
+\section{Computational illustrations}
+The filter banks discussed above can be examined numerically without changing the underlying reconstruction theory. I used periodic convolution and decimation with the filter coefficients in \eqref{eq:d4}, Table~\ref{tab:linfilters}, and \eqref{eq:mlt}. The corresponding calculations are included in the accompanying project files.
+
+\subsection{Frequency responses}
+For a finite filter $h_k[n]$, the frequency response is
+\begin{equation}
+H_k(e^{i\omega})=\sum_n h_k[n]e^{-i\omega n}.
+\end{equation}
+Figure~\ref{fig:responses} compares the three-band filter bank with a four-channel lapped cosine bank. The responses overlap: reconstruction depends on the cancellation of aliasing terms, not on disjoint ideal passbands.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=.92\linewidth]{figures/frequency_responses.pdf}
+\caption{Magnitude responses for the three-band and four-channel filter banks.}
+\label{fig:responses}
+\end{figure}
+
+\subsection{Multilevel decomposition}
+To illustrate localization, consider the sampled signal
+\begin{equation}
+\begin{aligned}
+x[n]={}&\sin(10\pi t_n)+0.5\,\mathbf 1_{t_n>0.6}\\
+&+0.35\exp\!\left[-\frac12\left(\frac{t_n-0.31}{0.011}\right)^2\right]
++0.05\eta_n,\qquad t_n=\frac n{729},
+\end{aligned}
+\label{eq:synthetic}
+\end{equation}
+where $\eta_n$ is a pseudorandom normal sample (seed $3$). The six-tap three-band bank was applied at four levels. The relative reconstruction error was $4.4\times10^{-14}$, and the relative coefficient-energy discrepancy was $1.9\times10^{-14}$. The detail coefficients in Figure~\ref{fig:transient} concentrate around the pulse and the step, although their precise positions depend on the filters and decimation phase.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=.85\linewidth]{figures/three_band_multilevel.pdf}
+\caption{Four-level decomposition of the sampled signal in \eqref{eq:synthetic}. The dotted line marks the step at $t=0.6$.}
+\label{fig:transient}
+\end{figure}
+
+\section{Extensions and limitations}
+\subsection{Separable transforms in two dimensions}
+A one-dimensional bank can be applied independently along image rows and columns. If $X\in\R^{N\times N}$ is an image and $W$ is an orthogonal one-dimensional $M$-band transform matrix, its separable transform is
+\begin{equation}
+Y=WXW^\top.
+\label{eq:2d}
+\end{equation}
+There are $M^2$ first-level subbands, corresponding to every pairing of a row and a column channel, and $\norm{Y}_F=\norm{X}_F$. Only the low-low block is recursively decomposed in a standard separable multiresolution analysis. In the common dyadic case this yields the familiar LL, LH, HL, and HH blocks; an $M$-band image transform has a richer $M\times M$ subband array. This is the natural tensor-product extension of the one-dimensional transform. It is presented as theory here; the \texttt{mbandwt} repository primarily supports one-dimensional transforms and arbitrary-axis batched operations, not a separately advertised full image-coding pipeline.
+
+\subsection{Wavelet packets and adaptive trees}
+The ordinary pyramid in Figure~\ref{fig:tree} always expands channel $0$. A wavelet-packet transform instead permits detail channels to be split at later levels. For $M>2$, the tree has many possible branch patterns. An interesting research direction is to choose the tree based on a reproducible cost functional, such as entropy, coding length, or a task-specific reconstruction loss. This would allow the transform to adapt its frequency partition rather than fixing it in advance. Wavelet packets are beyond the current multilevel implementation, which explicitly recurses only on the approximation channel \cite{su2026}.
+
+\subsection{Designing filters rather than only using them}
+The random paraunitary factorization in \eqref{eq:factored} provides a natural search space. One may parameterize the unitary matrices by orthogonal rotations, impose DC and higher-moment constraints, and optimize an application-dependent objective such as passband leakage or average $K$-term approximation error. Every intermediate choice remains paraunitary, so perfect reconstruction need not be relearned by an optimizer. But differentiable parameterization, enforcement of low-pass conditions, treatment of boundary artifacts, and checks of regularity would still be necessary. This remains a possible extension rather than a completed part of the implementation.
+
+\subsection{Practical caveats}
+Several distinctions should remain explicit in any implementation or experiment:
+\begin{enumerate}
+\item \textbf{PR versus orthogonality.} PR can hold for biorthogonal banks; Parseval's identity follows only under an isometric analysis convention.
+\item \textbf{Orthogonality versus wavelet regularity.} A paraunitary bank can lack a meaningful low-pass channel and vanishing moments.
+\item \textbf{Periodic versus finite extension.} The usual $N\times N$ orthogonal-matrix picture describes a critically sampled periodic transform with suitable length; expansive boundary modes need separate coefficient accounting.
+\item \textbf{One-dimensional wavelets versus general signal processing.} Overlapping lapped transforms, cosine block transforms, $M$-adic wavelets, and wavelet packets are related but not interchangeable mathematical objects.
+\item \textbf{Numerical verification versus theorem.} A small reconstruction residual verifies a particular calculation; a proof of general PR comes from the exact filter identities or a constructive paraunitary factorization.
+\end{enumerate}
+\section{Conclusion}
+The central insight of the discrete wavelet transform is not simply that it detects high frequencies. It is that the same signal admits a nested collection of \emph{orthogonal subspace decompositions}, from which one can reconstruct the signal exactly and choose which scales to retain. The ordinary dyadic transform is only one instance of this structure. An $M$-band transform introduces $M-1$ detail channels per stage, leading to different scale spacings, different frequency tilings, and a larger filter-design space.
+
+The algebraic language is especially revealing. Filter shifts lead to orthogonality constraints, polyphase decomposition turns alias cancellation into a matrix identity, and products of unitary matrices offer constructive families of perfect-reconstruction banks. The computational lesson from \texttt{mbandwt} is that these identities should be visible in the software: filter coefficients, boundary phase, delay, validation, and multilevel bookkeeping all affect the interpretation of numerical results. Its development from an orthogonal block example to a general FIR filter-bank framework mirrors the mathematical progression from linear algebra to multiresolution analysis. The choice of filter bank therefore depends not only on reconstruction, but also on the kinds of features one wants to resolve.
+
+\addcontentsline{toc}{section}{References}
+\begingroup\footnotesize
+\begin{thebibliography}{99}
+\bibitem{mallat1989} S. G. Mallat, ``A Theory for Multiresolution Signal Decomposition: The Wavelet Representation,'' \emph{IEEE Transactions on Pattern Analysis and Machine Intelligence}, vol. 11, no. 7, pp. 674--693, 1989. \href{https://doi.org/10.1109/34.192463}{doi:10.1109/34.192463}.
+\bibitem{daubechies1992} I. Daubechies, \emph{Ten Lectures on Wavelets}. Society for Industrial and Applied Mathematics, 1992.
+\bibitem{steffen1993} P. Steffen, P. N. Heller, R. A. Gopinath, and C. S. Burrus, ``Theory of Regular $M$-Band Wavelet Bases,'' \emph{IEEE Transactions on Signal Processing}, vol. 41, no. 12, pp. 3497--3511, 1993. \href{https://doi.org/10.1109/78.258088}{doi:10.1109/78.258088}.
+\bibitem{lin2006} T. Lin, S. Xu, Q. Shi, and P. Hao, ``An Algebraic Construction of Orthonormal $M$-Band Wavelets with Perfect Reconstruction,'' \emph{Applied Mathematics and Computation}, vol. 172, no. 2, pp. 717--730, 2006. \href{https://doi.org/10.1016/j.amc.2004.11.025}{doi:10.1016/j.amc.2004.11.025}.
+\bibitem{vaidyanathan1993} P. P. Vaidyanathan, \emph{Multirate Systems and Filter Banks}. Prentice Hall, 1993.
+\bibitem{vetterli1995} M. Vetterli and J. Kova\v{c}evi\'c, \emph{Wavelets and Subband Coding}. Prentice Hall, 1995.
+\bibitem{princen1986} J. P. Princen and A. B. Bradley, ``Analysis/Synthesis Filter Bank Design Based on Time Domain Aliasing Cancellation,'' \emph{IEEE Transactions on Acoustics, Speech, and Signal Processing}, vol. 34, no. 5, pp. 1153--1161, 1986. \href{https://doi.org/10.1109/TASSP.1986.1164954}{doi:10.1109/TASSP.1986.1164954}.
+\bibitem{lee2019} G. R. Lee, R. Gommers, F. Wasilewski, K. Wohlfahrt, and A. O'Leary, ``PyWavelets: A Python Package for Wavelet Analysis,'' \emph{Journal of Open Source Software}, vol. 4, no. 36, p. 1237, 2019. \href{https://doi.org/10.21105/joss.01237}{doi:10.21105/joss.01237}.
+\bibitem{lambers2006} J. Lambers, \emph{PE281 Lecture 10: Wavelet Analysis}, lecture notes, May 9, 2006.
+\bibitem{su2026} J. E. Su, \emph{mbandwt: $M$-Band Transform Experiments}, Python source repository, version 0.1.0, accessed October 29, 2026. \href{https://github.com/JiayuEllieSu/mbandwt}{github.com/JiayuEllieSu/mbandwt}.
+\end{thebibliography}\endgroup
+\end{document}
