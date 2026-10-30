@@ -1,9 +1,7 @@
-"""Coefficient containers with exact finite-signal bookkeeping.
+"""Coefficient arrays and boundary metadata for inverse transforms.
 
-Transforms never return naked lists: results carry every piece of metadata
-needed to reconstruct the exact original array (mode, original length,
-padding/extension amounts, work length, transform axis, and the identity of
-the filter bank that produced them).
+Results retain the original length, boundary mode, padding, transform
+axis, and filter-bank signature.
 """
 
 from __future__ import annotations

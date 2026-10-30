@@ -1,18 +1,9 @@
-"""One-level M-band DWT and inverse DWT.
+"""One-level M-band analysis and reconstruction.
 
-Engine layering (plan: public API -> bookkeeping -> boundary handling ->
-FilterBank -> transform engine -> upfirdn/NumPy/SciPy):
-
-* ``zero`` mode is the primitive: analysis is
-  ``scipy.signal.upfirdn(h, x, up=1, down=M)`` (full linear convolution
-  decimated at phase 0), synthesis is ``upfirdn(g, c, up=M, down=1)``
-  summed over bands, then delay/gain compensated and cropped.
-* ``periodic`` mode is derived from it through the folding identity
-  (circular convolution = linear convolution folded modulo N).
-* ``symmetric``/``reflect``/``constant`` modes extend the signal by
-  ``E = L_max - 1`` samples per side and run the ``zero`` primitive on the
-  extended signal; reconstruction crops the center. All modes reconstruct
-  exactly for PR banks. See ``docs/conventions.md``.
+Analysis uses ``scipy.signal.upfirdn`` with decimation phase zero.
+Periodic mode folds the convolution modulo the signal length. Other
+boundary modes use zero padding or explicit signal extension.
+See ``docs/conventions.md`` for the filtering and delay conventions.
 """
 
 from __future__ import annotations
@@ -27,9 +18,7 @@ from .filterbank import FilterBank
 __all__ = ["dwt", "idwt"]
 
 
-# ----------------------------------------------------------------------
 # low-level helpers (all along the last axis)
-# ----------------------------------------------------------------------
 def _fold(y: np.ndarray, N: int) -> np.ndarray:
     """Fold the last axis modulo ``N``: out[i] = sum_{j == i mod N} y[j]."""
     L = y.shape[-1]
@@ -66,11 +55,8 @@ def _analyze_periodic(x: np.ndarray, filters, M: int) -> list[np.ndarray]:
     N = x.shape[-1]
     if N % M:
         raise ValueError("periodic analysis requires M | N")
-    # Decimate the linear convolution first, then fold modulo N/M. This is
-    # equivalent to fold-then-decimate because, with M | N, the indices
-    # congruent to M*n modulo N are exactly the multiples of M in the
-    # congruence class of n modulo N/M — and it computes M times fewer
-    # samples.
+    # With M | N, decimation before folding gives the same result as
+    # folding to length N first, with fewer intermediate samples.
     return [_fold(upfirdn(h, x, 1, M, axis=-1), N // M) for h in filters]
 
 
@@ -80,9 +66,7 @@ def _synthesize_periodic_raw(bands, filters, M: int, N: int) -> np.ndarray:
     return _fold(_sum_to_length(parts, N), N)
 
 
-# ----------------------------------------------------------------------
 # public API
-# ----------------------------------------------------------------------
 def dwt(x, bank: FilterBank, mode: str = "periodic", axis: int = -1) -> DWTResult:
     """One-level M-band discrete wavelet transform.
 

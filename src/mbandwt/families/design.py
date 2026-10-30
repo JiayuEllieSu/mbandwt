@@ -1,15 +1,13 @@
-"""Constructive paraunitary bank design for arbitrary M.
+"""Paraunitary M-channel filter banks constructed from matrix factors.
 
-Every FIR paraunitary (orthonormal) M-channel polyphase matrix can be
-written as a product of unitary matrices and elementary delay factors
-(Vaidyanathan, 1993, Ch. 6):
+Following the degree-one factorization in Vaidyanathan (1993, Ch. 6),
+the polyphase matrix is assembled as
 
     E(z) = V_K Lambda(z) V_{K-1} Lambda(z) ... Lambda(z) V_0,
     Lambda(z) = diag(1, ..., 1, z^{-1}).
 
-Building E(z) this way and reading the filters off the polyphase components
-yields orthonormal PR banks for any ``M`` and any McMillan degree — an
-unlimited supply of valid test cases and design starting points.
+The unitary matrices and delay factors give a paraunitary polyphase
+matrix; the analysis filters are recovered from its coefficients.
 """
 
 from __future__ import annotations

@@ -1,8 +1,7 @@
-"""Block-transform banks for arbitrary M.
+"""Nonoverlapping M-channel block transforms.
 
-These have length-M filters (no overlap between blocks). Their frequency
-selectivity is modest, but they are exactly orthonormal for every ``M``,
-which makes them ideal reference banks for testing arbitrary-M machinery.
+The filters have length M. These simple orthonormal banks are useful
+for checking the transform implementation.
 """
 
 from __future__ import annotations
@@ -39,10 +38,9 @@ def block_dct(M: int) -> FilterBank:
 
 
 def lazy(M: int) -> FilterBank:
-    """The lazy filter bank: pure polyphase splitting, ``h_k[n] = delta[n-k]``.
+    """Polyphase splitting with ``h_k[n] = delta[n-k]``.
 
-    Trivially orthonormal and PR for every ``M``; useful as an engine sanity
-    check (its polyphase matrix is the identity, delay ``M - 1``).
+    The polyphase matrix is the identity, with delay ``M - 1``.
     """
     if M < 2:
         raise ValueError("M must be at least 2")

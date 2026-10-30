@@ -1,9 +1,8 @@
 """Multilevel M-band decomposition and reconstruction.
 
-``wavedec`` recursively decomposes only band 0 (ordinary multiresolution
-analysis); wavelet-packet decomposition, where every band branches, is
-deliberately out of scope for v0.x. Each level stores its own bookkeeping
-so ``waverec`` reconstructs the exact original array.
+Only the approximation band is decomposed at each level. Boundary
+metadata are retained for the inverse transform. Wavelet-packet trees
+are not implemented.
 """
 
 from __future__ import annotations
@@ -22,10 +21,10 @@ __all__ = ["wavedec", "waverec", "max_level"]
 
 
 def max_level(N: int, bank: FilterBank) -> int:
-    """Largest sensible decomposition depth for a length-``N`` signal.
+    """Recommended depth based on signal and filter lengths.
 
-    Analogous to PyWavelets' rule: ``floor(log_M(N / (L_max - 1)))`` where
-    ``L_max`` is the longest analysis filter, with natural degenerate cases.
+    Uses ``floor(log_M(N / (L_max - 1)))`` when ``L_max > 1``,
+    with separate handling for short signals.
     """
     M = bank.M
     L = max(len(h) for h in bank.analysis)

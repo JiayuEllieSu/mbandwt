@@ -1,10 +1,4 @@
-"""Built-in filter-bank catalog.
-
-Every bank carries provenance (``reference``/``family``) so users know
-where the construction comes from. Planned but not yet included:
-transcribed algebraic 3-/4-band coefficient tables from the M-band
-literature (requires careful sourcing; see the roadmap in the README).
-"""
+"""Built-in filter-bank families and constructors."""
 
 from .block import block_dct, lazy
 from .cosine import mlt

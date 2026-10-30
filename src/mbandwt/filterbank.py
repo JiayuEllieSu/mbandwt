@@ -1,9 +1,7 @@
-"""The :class:`FilterBank` object: an arbitrary-M critically sampled
-wavelet filter bank with mathematical diagnostics.
+"""M-channel FIR analysis and synthesis filter banks.
 
-The filter bank — not the transform function — is the conceptual center of
-``mbandwt``. ``M`` is inferred from the number of filters and is not
-restricted by the API.
+The number of analysis filters determines the channel count ``M``.
+This module also provides reconstruction and orthogonality diagnostics.
 """
 
 from __future__ import annotations
@@ -94,9 +92,7 @@ class FilterBank:
         self._pr_cache: dict = {}
         self._orth_cache: dict = {}
 
-    # ------------------------------------------------------------------
     # basic structure
-    # ------------------------------------------------------------------
     @property
     def M(self) -> int:
         """Number of channels (decimation factor)."""
@@ -159,9 +155,7 @@ class FilterBank:
             c = float(np.real(c))
         return c, d, t
 
-    # ------------------------------------------------------------------
     # diagnostics
-    # ------------------------------------------------------------------
     def pr_report(self, rtol: float = 1e-8) -> dict:
         """Algebraic polyphase PR test (cached). See :func:`mbandwt.polyphase.pr_check`."""
         if rtol not in self._pr_cache:
@@ -197,9 +191,7 @@ class FilterBank:
 
         return validate(self, rtol=rtol)
 
-    # ------------------------------------------------------------------
     # polyphase access
-    # ------------------------------------------------------------------
     def polyphase_analysis(self) -> np.ndarray:
         """Type-I analysis polyphase matrix ``E`` as an ``(M, M, T)`` array."""
         return _pp.analysis_polyphase(self._analysis, self.M)
@@ -208,9 +200,7 @@ class FilterBank:
         """Type-II synthesis polyphase matrix ``R`` as an ``(M, M, T)`` array."""
         return _pp.synthesis_polyphase(self._synthesis, self.M)
 
-    # ------------------------------------------------------------------
     # spectral / moment diagnostics
-    # ------------------------------------------------------------------
     def frequency_response(self, n: int = 512, which: str = "analysis"):
         """Frequency responses on ``[0, pi]``.
 
@@ -272,7 +262,6 @@ class FilterBank:
             counts.append(V)
         return counts
 
-    # ------------------------------------------------------------------
     def __repr__(self) -> str:
         label = self.name or "custom"
         la = ",".join(str(len(h)) for h in self._analysis)
